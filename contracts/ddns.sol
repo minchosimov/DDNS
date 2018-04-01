@@ -38,9 +38,13 @@ contract DDNS is Owner{
      //the domain is bytes, because string is UTF-8 encoded and we cannot get its length
     //the IP is bytes4 because it is more efficient in storing the sequence
     
-	mapping (bytes => address) private domainOwner; //domain -- owner
+    struct DomainInfo{
+        address domainOwner;
+        bytes4 domainIP;
+        uint expires;
+    }
     
-	mapping (bytes => bytes4) private domainIP; // domain  -- ip
+    mapping (bytes => DomainInfo) private domainInfo;
     
 	//struct for receipt
     struct Receipt{ //recept
@@ -49,48 +53,57 @@ contract DDNS is Owner{
         uint expires;
     }
     
-    mapping (bytes => Receipt) private domainReceipt; // domain - recept(last for it)
-    
     mapping (address => Receipt[]) private receipts; // account - receipts 
     
     
     //modifier domain's owner access 
     modifier ownerAccess(bytes domain){
-        require(domainOwner[domain] == msg.sender);
+        require(domainInfo[domain].domainOwner == msg.sender);
+        require(domainInfo[domain].expires > now);
         _;
     }
     
     // domain contains more or equal than 5 symbols
-    modifier domainNameCheck (bytes domain){
-        require(domain.length>=5);
+    modifier domainNameCheck (bytes _domain){
+        require(_domain.length>5 && _domain.length<30);
         _;
     }
     
-    modifier domainPrice(bytes domain){
-        require(msg.value >= getPrice(domain));
+    modifier domainPrice(bytes _domain){
+        require(msg.value >= getPrice(_domain));
         _;
     }
     
-    function register(bytes domain, bytes4 ip) public payable domainNameCheck(domain) domainPrice(domain) {
+    
+    modifier domainHasAvailableForBuy (bytes domain){
+        if ( domainInfo[domain].expires < now ){
+            _;
+        } else{
+            if(domainInfo[domain].domainOwner == msg.sender){
+                _;
+            } else {
+                revert();
+            }
+        }
+    }
+    
+    function register(bytes domain, bytes4 ip) public payable domainNameCheck(domain) 
+                        domainPrice(domain) domainHasAvailableForBuy(domain) {
         uint payTime = now;
         uint expTime;
         Receipt memory newRecept;
         address sender = msg.sender;
         
-        if(domainReceipt[domain].timestamp == 0 || domainReceipt[domain].expires < now ){
-            domainOwner[domain] = sender;
-            domainIP[domain] = ip;
-            expTime = payTime+1 years;
-            newRecept = Receipt({amountPaidWei:msg.value,timestamp:payTime,expires:expTime});
-            domainReceipt[domain] = newRecept;
-            receipts[sender].push(newRecept);
+        if (domainInfo[domain].expires == 0 || domainInfo[domain].expires < now){
+            expTime = payTime + 1 years;
         } else {
-            require(sender == domainOwner[domain]);
-            expTime = domainReceipt[domain].expires+1 years;
-            newRecept = Receipt({amountPaidWei:msg.value,timestamp:payTime,expires:expTime});
-            domainReceipt[domain] = newRecept;
-            receipts[sender].push(newRecept);
+            expTime = domainInfo[domain].expires + 1 years;
         }
+        newRecept = Receipt({amountPaidWei:msg.value,timestamp:payTime,expires:expTime});
+        domainInfo[domain].domainOwner = sender;
+        domainInfo[domain].domainIP = ip;
+        domainInfo[domain].expires = expTime;
+        receipts[sender].push(newRecept);
         
         RegisterDomain(domain,ip,expTime,sender);
     }
@@ -100,18 +113,17 @@ contract DDNS is Owner{
     }
     
     function edit(bytes domain, bytes4 newIp) public ownerAccess(domain){
-        ChangeDomainIp(domain,domainIP[domain],newIp);
-        domainIP[domain] = newIp;
+        ChangeDomainIp(domain,domainInfo[domain].domainIP,newIp);
+        domainInfo[domain].domainIP = newIp;
     }
     
     function transferDomain(bytes domain, address newOwner) public ownerAccess(domain) {
-        TransferDomain (domain, domainOwner[domain],newOwner);
-        domainOwner[domain] = newOwner;
-        
+        TransferDomain (domain, domainInfo[domain].domainOwner,newOwner);
+        domainInfo[domain].domainOwner = newOwner;
     }
     
     function getIP(bytes domain) public view returns (bytes4) {
-        return domainIP[domain];
+        return domainInfo[domain].domainIP;
     }
     
     function getPrice(bytes domain) public pure returns (uint) {
@@ -144,6 +156,6 @@ contract DDNS is Owner{
 	
 	//return last expiries date of domain
 	function getExpDateDomain(bytes domain) public view returns(uint){
-		return domainReceipt[domain].expires;
+		return domainInfo[domain].expires;
 	}
 }

@@ -279,7 +279,7 @@ function init(){
 
 function updateAccount(){
 	//in metamask, the accounts array is of size 1 and only contains the currently selected account. The user can select a different account and so we need to update our account variable
-	acc = web3.eth.accounts[1];
+	acc = web3.eth.accounts[2];
 }
 
 function displayPrice(values){
@@ -305,12 +305,12 @@ function onSubmitPressed(){
 	var ip = document.getElementById("id").value;
 	var price  = document.getElementById("price").value;
     
-	if (domain.length >= 5 ){
+	if (domain.length > 5 ){
 		contractInstance.register(domain,ip, {"from": acc,"value":web3.toWei(price, "ether")}, function(err, res){
 		if(!err){
 			displayMessage("Success! Transaction hash: " + res.valueOf());
 		} else {
-			displayMessage("Something went wrong. Are you sure that domain is free or price is enough?");
+			displayMessage("Something went wrong. Are you sure that domain is free or price is enough? "+err.valueOf());
 		}
 		})
 	} else {
